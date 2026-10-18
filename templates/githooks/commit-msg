@@ -1,0 +1,22 @@
+#!/bin/sh
+# Rejects AI attribution in commit messages, from any tool or person.
+# Enable per clone: git config core.hooksPath .githooks
+set -eu
+# Comment lines are checked too: git keeps them with -m, -F or --cleanup=verbatim. Git cuts at the
+# scissors line only with -v, or --cleanup=scissors when the editor opens; otherwise a typed
+# scissors line and all after it stay. So below it, skip only diff-shaped lines once `diff ` starts.
+message=$(awk '
+  $0 == "# ------------------------ >8 ------------------------" { below = 1; next }
+  below && /^diff / { diff = 1 }
+  diff && /^([-+ @\\]|diff |index |new file mode|deleted file mode|old mode|new mode|similarity index|dissimilarity index|rename (from|to) |copy (from|to) |Binary files |Submodule )/ { next }
+  { print }
+' "$1")
+if printf '%s\n' "$message" | grep -Eiq \
+  -e '^[#[:space:]]*co-authored-by:.*(claude|anthropic|openai|codex|gpt|copilot|gemini)' \
+  -e 'noreply@(anthropic|openai)\.com' \
+  -e '^[#[:space:]]*claude-session:' \
+  -e 'generated (with|by) \[?(claude|codex|copilot|chatgpt|gpt|gemini|cursor|ai assistant)' \
+  -e '🤖'; then
+  echo 'commit-msg: AI attribution is not allowed in commit messages.' >&2
+  exit 1
+fi

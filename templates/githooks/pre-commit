@@ -1,0 +1,31 @@
+#!/bin/sh
+# Fast gate: runs before every commit, for every agent and person. Keep it to seconds.
+# Enable per clone: git config core.hooksPath .githooks
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+
+# Tripwire: skip while no source file is tracked (new ones count once added); never key on setup files.
+git ls-files -- <source patterns, e.g. '*.py' or '*.ts'> | grep -q . || exit 0
+
+for tool in <tools the checks need>; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "pre-commit: $tool isn't installed, so the checks can't run; install it and commit again." >&2
+    exit 1
+  }
+done
+
+# One command per line: set -e stops at the first failure (it doesn't inside an && chain).
+<format check>
+<lint>
+<typecheck>
+<fast tests>
+<build>
+
+# A lockfile change runs the dependency audit.
+if git diff --cached --name-only | grep -Eq '(^|/)(<lockfile names>)$'; then
+  <dependency audit>
+fi
+
+# Next line only when the project holds credentials or the repo is or may become public:
+<secret scan of staged changes>
+echo "pre-commit: checks passed."
